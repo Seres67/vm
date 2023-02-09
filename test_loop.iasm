@@ -1,0 +1,4 @@
+load $1 #10
+loop: inc $0
+neq $0 $1
+djeq @loop

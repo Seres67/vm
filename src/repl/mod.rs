@@ -5,11 +5,12 @@ use std::io;
 use std::io::{Read, Write};
 use std::path::Path;
 use nom::types::CompleteStr;
+use crate::assembler::Assembler;
 
-#[derive(Default)]
 pub struct REPL {
     command_buffer: Vec<String>,
     vm: VM,
+    asm: Assembler,
 }
 
 impl REPL {
@@ -17,6 +18,7 @@ impl REPL {
         REPL {
             command_buffer: vec![],
             vm: VM::new(),
+            asm: Assembler::new(),
         }
     }
 
@@ -42,11 +44,21 @@ impl REPL {
                 }
                 ".program" => {
                     for instruction in &self.vm.program {
-                        println!("{instruction}");
+                        print!("{instruction} ");
                     }
+                    println!();
                 }
                 ".registers" => {
-                    println!("{:#?}", self.vm.registers);
+                    for register in self.vm.registers {
+                        print!("{register:} ");
+                    }
+                    println!();
+                }
+                ".flag" => {
+                    println!("{:}", self.vm.equal_flag);
+                }
+                ".pc" => {
+                    println!("{:}", self.vm.pc);
                 }
                 ".clear" => {
                     self.vm.program.clear();
@@ -61,16 +73,27 @@ impl REPL {
                     let mut f = File::open(filename).expect("unable to open file");
                     let mut contents = String::new();
                     f.read_to_string(&mut contents).expect("unable to read file");
-                    let program = match program(CompleteStr(&contents)) {
-                        Ok((_, program)) => {
-                            program
-                        },
-                        Err(e) => {
-                            println!("Unable to parse input: {e:?}");
-                            continue;
+                    match self.asm.assemble(&contents) {
+                        Some(mut assembled_program) => {
+                            self.vm.program.append(&mut assembled_program);
                         }
-                    };
-                    self.vm.program.append(&mut program.to_bytes());
+                        None => {
+                            println!("unable to assemble file");
+                            return;
+                        }
+                    }
+                }
+                ".run" => {
+                    if self.vm.program.is_empty() {
+                        continue;
+                    }
+                    self.vm.run();
+                }
+                ".next" => {
+                    if self.vm.program.is_empty() {
+                        continue;
+                    }
+                    self.vm.run_once();
                 }
                 _ => {
                     let program = match program(buffer.into()) {
@@ -80,7 +103,7 @@ impl REPL {
                             continue;
                         }
                     };
-                    self.vm.program.append(&mut program.to_bytes());
+                    self.vm.program.append(&mut program.to_bytes(&self.asm.symbols));
                     self.vm.run_once();
                 }
             }

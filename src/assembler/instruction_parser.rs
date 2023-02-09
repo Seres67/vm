@@ -1,10 +1,8 @@
 use crate::assembler::label_parser::label_declaration;
 use crate::assembler::opcode_parser::opcode;
-use crate::assembler::operand_parser::integer_operand;
 use crate::assembler::operand_parser::operand;
-use crate::assembler::register_parser::register;
-use crate::assembler::Token;
-use nom::multispace;
+use crate::assembler::{SymbolTable, Token};
+use byteorder::{LittleEndian, WriteBytesExt};
 use nom::types::CompleteStr;
 
 #[derive(Debug, PartialEq)]
@@ -18,7 +16,7 @@ pub struct AssemblerInstruction {
 }
 
 impl AssemblerInstruction {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self, symbols: &SymbolTable) -> Vec<u8> {
         let mut results: Vec<u8> = vec![];
         if let Some(ref token) = self.opcode {
             match token {
@@ -32,7 +30,7 @@ impl AssemblerInstruction {
             }
         }
         for operand in [&self.operand1, &self.operand2, &self.operand3].iter().copied().flatten() {
-                AssemblerInstruction::extract_operand(operand, &mut results);
+                AssemblerInstruction::extract_operand(operand, &mut results, symbols);
         }
         while results.len() < 4 {
             results.push(0);
@@ -40,7 +38,7 @@ impl AssemblerInstruction {
         results
     }
 
-    fn extract_operand(t: &Token, results: &mut Vec<u8>) {
+    fn extract_operand(t: &Token, results: &mut Vec<u8>, symbols: &SymbolTable) {
         match t {
             Token::Register { register_number } => results.push(*register_number),
             Token::Number { value } => {
@@ -50,98 +48,36 @@ impl AssemblerInstruction {
                 results.push(byte2 as u8);
                 results.push(byte1 as u8);
             }
+            Token::LabelUsage {name} => {
+                if let Some(value) = symbols.symbol_value(name) {
+                    let mut wtr = vec![];
+                    wtr.write_u32::<LittleEndian>(value).unwrap();
+                    results.push(wtr[1]);
+                    results.push(wtr[0]);
+                }
+            }
             _ => {
                 println!("Opcode found in operand field");
                 std::process::exit(1);
             }
         }
     }
+
+    pub fn is_label(&self) -> bool
+    {
+        self.label.is_some()
+    }
+
+    pub fn label_name(&self) -> Option<String> {
+        match &self.label {
+            Some(label) => match label {
+                Token::LabelDeclaration {name} => Some(name.clone()),
+                _ => None
+            }
+            None => None,
+        }
+    }
 }
-
-named!(pub instruction_one<CompleteStr, AssemblerInstruction>,
-    do_parse!(
-        opcode: opcode >>
-        register1: register >>
-        register2: register >>
-        register3: register >>
-        (
-            AssemblerInstruction {
-                opcode: Some(opcode),
-                directive: None,
-                label: None,
-                operand1: Some(register1),
-                operand2: Some(register2),
-                operand3: Some(register3)
-            }
-        )
-    )
-);
-
-named!(pub instruction_two<CompleteStr, AssemblerInstruction>,
-    do_parse!(
-        opcode: opcode >>
-        register: register >>
-        integer: integer_operand >>
-        (
-            AssemblerInstruction{
-                opcode: Some(opcode),
-                directive: None,
-                label: None,
-                operand1: Some(register),
-                operand2: Some(integer),
-                operand3: None
-            }
-        )
-    )
-);
-
-named!(pub instruction_three<CompleteStr, AssemblerInstruction>,
-    do_parse!(
-        opcode: opcode >>
-        register: register >>
-        (
-            AssemblerInstruction{
-                opcode: Some(opcode),
-                directive: None,
-                label: None,
-                operand1: Some(register),
-                operand2: None,
-                operand3: None
-            }
-        )
-    )
-);
-
-named!(pub instruction_four<CompleteStr, AssemblerInstruction>,
-    do_parse!(
-        opcode: opcode >>
-        opt!(multispace) >>
-        (
-            AssemblerInstruction {
-                opcode: Some(opcode),
-                directive: None,
-                label: None,
-                operand1: None,
-                operand2: None,
-                operand3: None
-            }
-        )
-    )
-);
-
-named!(pub instruction<CompleteStr, AssemblerInstruction>,
-    do_parse!(
-        instruction: alt!(
-            instruction_one |
-            instruction_two |
-            instruction_three |
-            instruction_four
-        ) >>
-        (
-            instruction
-        )
-    )
-);
 
 named!(instruction_combined<CompleteStr, AssemblerInstruction>,
     do_parse!(
@@ -159,6 +95,17 @@ named!(instruction_combined<CompleteStr, AssemblerInstruction>,
                 operand2,
                 operand3,
             }
+        )
+    )
+);
+
+named!(pub instruction<CompleteStr, AssemblerInstruction>,
+    do_parse!(
+        instruction: alt!(
+            instruction_combined
+        ) >>
+        (
+            instruction
         )
     )
 );

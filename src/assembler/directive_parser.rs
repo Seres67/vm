@@ -1,5 +1,6 @@
 use crate::assembler::instruction_parser::AssemblerInstruction;
 use crate::assembler::operand_parser::operand;
+use crate::assembler::label_parser::label_declaration;
 use crate::assembler::Token;
 use nom::alpha1;
 use nom::types::CompleteStr;
@@ -17,7 +18,7 @@ named!(directive_declaration<CompleteStr, Token>,
 named!(directive_combined<CompleteStr, AssemblerInstruction>,
     ws!(
         do_parse!(
-            tag!(".") >>
+            label: opt!(label_declaration) >>
             name: directive_declaration >>
             operand1: opt!(operand) >>
             operand2: opt!(operand) >>
@@ -26,7 +27,7 @@ named!(directive_combined<CompleteStr, AssemblerInstruction>,
                 AssemblerInstruction {
                     opcode: None,
                     directive: Some(name),
-                    label: None,
+                    label,
                     operand1,
                     operand2,
                     operand3
@@ -38,7 +39,7 @@ named!(directive_combined<CompleteStr, AssemblerInstruction>,
 
 named!(pub directive<CompleteStr, AssemblerInstruction>,
     do_parse!(
-        ins:alt!(
+        ins: alt!(
             directive_combined
         ) >>
         (

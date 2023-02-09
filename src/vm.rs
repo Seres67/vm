@@ -3,11 +3,11 @@ use crate::instruction::Opcode;
 #[derive(Default)]
 pub struct VM {
     pub registers: [i32; 32],
-    pc: usize,
+    pub pc: usize,
     pub program: Vec<u8>,
     heap: Vec<u8>,
     remainder: u32,
-    equal_flag: bool,
+    pub equal_flag: bool,
 }
 
 impl VM {
@@ -26,6 +26,10 @@ impl VM {
         self.program.push(byte);
     }
 
+    pub fn add_bytes(&mut self, mut bytes: Vec<u8>) {
+        self.program.append(&mut bytes);
+    }
+
     pub fn run(&mut self) {
         'running: loop {
             if !self.execute_instruction() {
@@ -42,7 +46,8 @@ impl VM {
         if self.pc >= self.program.len() {
             return false;
         }
-        match self.decode_opcode() {
+        let opcode = self.decode_opcode();
+        match opcode {
             Opcode::HLT => {
                 println!("Stopping VM...");
                 return false;
@@ -146,9 +151,12 @@ impl VM {
                 self.next_8_bits();
             }
             Opcode::JEQ => {
-                let target = self.registers[self.next_8_bits() as usize];
                 if self.equal_flag {
+                    let target = self.registers[self.next_8_bits() as usize];
                     self.pc = target as usize;
+                } else {
+                    self.next_16_bits();
+                    self.next_8_bits();
                 }
             }
             Opcode::ALLOC => {
@@ -160,10 +168,21 @@ impl VM {
             Opcode::INC => {
                 let register = self.next_8_bits() as usize;
                 self.registers[register] += 1;
+                self.next_16_bits();
             }
             Opcode::DEC => {
                 let register = self.next_8_bits() as usize;
                 self.registers[register] += 1;
+                self.next_16_bits();
+            }
+            Opcode::DJEQ => {
+                if self.equal_flag {
+                    let value = self.next_16_bits();
+                    self.pc = value as usize;
+                } else {
+                    self.next_16_bits();
+                    self.next_8_bits();
+                }
             }
             opcode => {
                 println!("What are you trying to do? (Invalid Opcode: {opcode:?})");

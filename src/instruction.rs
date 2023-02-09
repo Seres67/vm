@@ -21,6 +21,7 @@ pub enum Opcode {
     ALLOC,
     INC,
     DEC,
+    DJEQ,
     ILLEGAL, // Illegal
 }
 
@@ -46,6 +47,7 @@ impl From<u8> for Opcode {
             16 => Opcode::ALLOC,
             17 => Opcode::INC,
             18 => Opcode::DEC,
+            19 => Opcode::DJEQ,
             _ => Opcode::ILLEGAL,
         }
     }
@@ -74,6 +76,7 @@ impl<'a> From<CompleteStr<'a>> for Opcode {
             CompleteStr("alloc") => Opcode::ALLOC,
             CompleteStr("inc") => Opcode::INC,
             CompleteStr("dec") => Opcode::DEC,
+            CompleteStr("djeq") => Opcode::DJEQ,
             _ => Opcode::ILLEGAL,
         }
     }
